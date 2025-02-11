@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  KYC application serverless backend lambda.
+
+Parameters:
+  AWSUserPoolID:
+    Type: String
+    Description: AWS User Pool ID
+  AWSUserPoolAppClientID:
+    Type: String
+    Description: AWS User Pool Client ID
+  AWSAccessKeyID:
+    Type: String
+    Description: AWS Access Key ID
+  AWSSecretAccessKey:
+    Type: String
+    Description: AWS Secret Access Key
+  DBPath:
+    Type: String
+    Description: MongoDB connection string
+  AWSS3BucketName:
+    Type: String
+    Description: AWS S3 bucket name for file uploads
+    Default: kyc-app-documents
+
+Resources:
+  KYCApplicationAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: kyc-application-api
+      StageName: dev
+      DefinitionBody:
+        openapi: 3.0.0
+        info:
+          description: API for working with KYC Application API serverless express lambda
+          title: KYC Application API
+          version: '1.0'
+        paths:
+          /{proxy+}:
+            options:
+              summary: CORS support
+              description: Enable CORS by returning correct headers. Authentication
+                not required.
+              parameters:
+                - name: proxy
+                  in: Path
+                  required: true
+                  schema:
+                    type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: '200'
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:kyc-application-api/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+            x-amazon-apigateway-any-method:
+              parameters:
+                - name: proxy
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+              responses: {}
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: '200'
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:kyc-application-api/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                cacheNamespace: kyc-application-api
+                cacheKeyParameters:
+                  - method.request.path.proxy
+                type: aws_proxy
+  KYCApplicationAPIRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: 'kyc-application-api-role'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+  KYCApplicationAPILambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: 'kyc-application-api'
+      CodeUri: build
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Timeout: 120
+      MemorySize: 1024
+      Role: !GetAtt KYCApplicationAPIRole.Arn
+      Environment:
+        Variables:
+          AWS_USER_POOL_ID: !Ref AWSUserPoolID
+          AWS_USER_POOL_APP_CLIENT_ID: !Ref AWSUserPoolAppClientID
+          AWSAccessKeyID: !Ref AWSAccessKeyID
+          AWSSecretAccessKey: !Ref AWSSecretAccessKey
+          AWS_S3_BUCKET_NAME: !Ref AWSS3BucketName
+          DBPath: !Ref DBPath
+      Events:
+        Proxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref KYCApplicationAPI
+            Path: /{proxy+}
+            Method: any
+Outputs:
+  KYCApplicationAPIEndpoint:
+    Description: 'KYC Application API endpoint'
+    Value: !Sub 'https://${KYCApplicationAPI}.execute-api.${AWS::Region}.amazonaws.com'
+    Export:
+      Name: 'kyc-application-api-endpoint'
