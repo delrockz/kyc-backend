@@ -10,6 +10,23 @@ const cookieParser = require('cookie-parser')
 const app = express()
 require('dotenv').config()
 
+var mongooseConnection
+;(async () => {
+  const mongoose = require('mongoose')
+
+  // Setting up Connection if not already exists.
+  if (!mongooseConnection) {
+    // Wait for the connection to MongoDB To Establish.
+    mongooseConnection = await mongoose.connect(process.env.DBPath || '', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    })
+    console.log('Connected To MongoDB.')
+  }
+
+  return mongooseConnection
+})()
+
 app.use(cookieParser())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
