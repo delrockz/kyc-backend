@@ -8,6 +8,7 @@ import {
 } from 'amazon-cognito-identity-js'
 import { USER_POOL_ID } from '../utils/aws-config'
 import User from '../models/User'
+import KycApplication from '../models/KycApplication'
 
 var userPool = new CognitoUserPool({
   UserPoolId: USER_POOL_ID,
@@ -60,12 +61,16 @@ export const loginUser = async (req: Request, res: Response, next: () => void) =
         Password: password
       }),
       {
-        onSuccess(session: CognitoUserSession) {
+        async onSuccess(session: CognitoUserSession) {
+          const user = await User.findOne({ email })
+          const linkedKycApplication = await KycApplication.findOne({ user: user?._id }).populate('user', 'email')
           return res.status(200).json({
             data: {
               accessToken: session.getAccessToken().getJwtToken(),
               refreshToken: session.getRefreshToken().getToken(),
-              idToken: session.getIdToken().getJwtToken()
+              idToken: session.getIdToken().getJwtToken(),
+              user,
+              kycApplication: linkedKycApplication
             }
           })
         },
